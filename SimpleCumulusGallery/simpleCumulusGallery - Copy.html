@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <script type="text/javascript" src="js/prototype.js"></script>
+        <script type="text/javascript" src="js/builder.js"></script>
+        <script type="text/javascript" src="js/JSONP.js"></script>
+        <script type="text/javascript">
+            /* Customizable Parameters */
+            var CIP_URL = "http://crc.canto.com/CIP_JSG/"; // CIP webapplication address
+            var CIP_CATALOG = "Marketing"; // Catalog name to be used
+            var CIP_USER = "_Partner";  // Cumulus User
+            var CIP_PASSWORD = "PM2012"; // Cumulus Password
+/*
+            var CIP_CATEGORY_NAME = "Media Releases / Blog / Info"; // Name of the category to be displayed
+            var CIP_QUERY_STRING = "Categories == ':B:" + CIP_CATEGORY_NAME + "'";
+            var CIP_SORT_BY = "Asset Modification Date:descending";
+*/
+            var CIP_CATEGORY_NAME = "2012 Annual Partner Meeting, Berlin"; // Name of the category to be displayed
+            var CIP_QUERY_STRING = "Categories == ':B:" + CIP_CATEGORY_NAME + "'";
+            var CIP_SORT_BY = "Asset Modification Date:descending";
+            var CONTAINER_WIDTH = 216; // width of the container
+            var TITLE_HEIGHT = 12;  // height of the title text element
+            var THUMBNAIL_SIZE = 32;  // size of the thumbnails
+
+            /* Don't touch this Variables */
+            var NAVIGATION_ICON_WIDTH = 18;
+            var MARGIN_RIGHT_THUMBNAIL = 4;
+            var listItemIDs;
+            var numberOfThumbnails = Math.ceil ((CONTAINER_WIDTH - NAVIGATION_ICON_WIDTH * 2) / (THUMBNAIL_SIZE + MARGIN_RIGHT_THUMBNAIL));
+            var currentIndex = 0;
+            var currentRecordID = 0;
+            var leftPositionScroll = 0;
+            var widthScroll = 0;
+            var pressTimer;
+            var pressInterval;
+
+            function openSession ()
+            {
+                configuringLayout ();
+                new Ajax.JSONRequest (CIP_URL + 'session/open/',
+                {
+                      method: 'get',
+                      onComplete: function(transport)
+                      {
+                          loadCategory ();
+                      },
+                      onFailure: function(transport)
+                      {
+                          alert ('Could not open session...' + transport.status)
+                      },
+                      callbackParamName: "jsoncallback",
+                      parameters:
+                      {
+                      	debug: '1'
+                      }
+                });
+
+                $("previousButton").observe('mouseup',function(evt)
+                {
+                    clearTimeout(pressTimer);
+                    clearInterval(pressInterval);
+                }).observe('mousedown',function(evt){
+                    pressTimer = window.setTimeout(function()
+                    {
+                        pressInterval = window.setInterval(function(){
+                            showPrevious ();
+                        }, 200);
+                    }, 200);
+                });
+
+                $("nextButton").observe('mouseup',function(evt)
+                {
+                    clearTimeout(pressTimer);
+                    clearInterval(pressInterval);
+                }).observe('mousedown',function(evt){
+                    pressTimer = window.setTimeout(function()
+                    {
+                         pressInterval = window.setInterval(function(){
+                            showNext ();
+                        }, 200);
+                    }, 200);
+                });
+            }
+
+            function loadCategory ()
+            {
+                new Ajax.JSONRequest (CIP_URL + "metadata/search/sample?user=" + CIP_USER +"&password=" + CIP_PASSWORD + "&catalogname=" + CIP_CATALOG +
+												"&querystring=" + CIP_QUERY_STRING + "&sortby=" + CIP_SORT_BY,
+                  {
+                      method:'post',
+                      onComplete: function(transport)
+                      {
+                          listItemIDs = transport.responseJSON;
+                          showGallery (currentIndex, numberOfThumbnails);
+                      },
+                      onFailure: function(transport)
+                      {
+                          alert ('Failed loading items for a category...' + transport.status);
+                      },
+                      callbackParamName: "jsoncallback",
+                      parameters: {
+                          debug: '1'
+                      }
+                  });
+            }
+
+            function loadRecord (recordID)
+            {
+            	currentRecordID = recordID;
+                var urlPreview = CIP_URL + "preview/thumbnail/sample/" + recordID + "?user=" + CIP_USER + "&password=" + CIP_PASSWORD + "&catalogname=" + CIP_CATALOG + "&size=" + CONTAINER_WIDTH;
+                $('preview').update ("<div><img id=\"previewimg\" src=\"" + urlPreview + "\" /></div>");
+
+                new Ajax.JSONRequest (CIP_URL + "metadata/getfieldvalues/sample/" + recordID + "?user=" + CIP_USER +"&password=" + CIP_PASSWORD + "&catalogname=" + CIP_CATALOG + "&field=Record+Name",
+                  {
+                      method:'get',
+                      onComplete: function(transport)
+                      {
+                          var fieldValues = transport.responseJSON;
+                          $('title').textContent = fieldValues['Record Name'];
+
+                          $('previewimg').setAttribute ("alt", fieldValues['Record Name']);
+                      },
+                      onFailure: function(transport)
+                      {
+                          alert ('Failed to get field values...' + transport.status);
+                      },
+                      callbackParamName: "jsoncallback",
+                      parameters: {
+                          debug: '1'
+                      }
+                  });
+            }
+
+            function showGallery (startIndex, size)
+            {
+                for (var i = startIndex; i < size; i++)
+                {
+                    var recordID = listItemIDs.ids[i];
+                    if (recordID)
+                    {
+                        if (i == 0)
+                        {
+                            // we load the first record in the preview
+                            loadRecord (recordID);
+                        }
+                        var urlIMG = CIP_URL + "preview/thumbnail/sample/" + recordID + "?user=" + CIP_USER + "&password=" + CIP_PASSWORD + "&catalogname=" + CIP_CATALOG + "&size=" + THUMBNAIL_SIZE;
+                        $('pics').appendChild(Builder.node ('div', [
+                                 Builder.node ('img', {id: "thumbnail" + recordID, className: "thumbnail", src: urlIMG, onClick: "loadRecord(" + recordID + ")" })
+                        ]));
+                    }
+                }
+            }
+            
+            function downloadAsset ()
+            {
+                var urlDownload = CIP_URL + "asset/download/sample/" + currentRecordID + "/a.pdf?user=" + CIP_USER + "&password=" + CIP_PASSWORD + "&catalogname=" + CIP_CATALOG;
+            	window.open (urlDownload);
+            }
+
+            function showPrevious ()
+            {
+                if (currentIndex > 0)
+                {
+                    currentIndex--;
+                    leftPositionScroll = leftPositionScroll + THUMBNAIL_SIZE + MARGIN_RIGHT_THUMBNAIL;
+                    $('pics').setStyle (
+                    {
+                        left: leftPositionScroll + 'px'
+                    });
+                }
+            }
+
+            function showNext()
+            {
+                if ((currentIndex + numberOfThumbnails) < listItemIDs.ids.length)
+                {
+                    currentIndex++;
+                    leftPositionScroll = leftPositionScroll - THUMBNAIL_SIZE - MARGIN_RIGHT_THUMBNAIL;
+                    widthScroll += THUMBNAIL_SIZE + MARGIN_RIGHT_THUMBNAIL;
+                    $ ('pics').setStyle (
+                    {
+                        left: leftPositionScroll + 'px',
+                        width: widthScroll + 'px'
+                    });
+                    var recordID = listItemIDs.ids[currentIndex + numberOfThumbnails];
+                    if (recordID)
+					{
+                        if ($('thumbnail' + recordID) == null)
+                        {
+                            var urlIMG = CIP_URL + "preview/thumbnail/sample/" + recordID + "?user=" + CIP_USER + "&password=" + CIP_PASSWORD + "&catalogname=" + CIP_CATALOG + "&size="+THUMBNAIL_SIZE;
+                            $ ('pics').appendChild(Builder.node ('div', [
+                                 Builder.node ('img', {id: "thumbnail" + recordID, className: "thumbnail", src: urlIMG, onClick: "loadRecord(" +recordID + ")" })
+                            ]));
+                        }
+                    }
+                }
+            }
+
+            function configuringLayout ()
+            {
+                $ ('preview').setStyle ({
+                     width: CONTAINER_WIDTH + 'px',
+                     height: CONTAINER_WIDTH + 'px'
+                });
+
+                $ ('title').setStyle ({
+                     width: CONTAINER_WIDTH + 'px',
+                     height: TITLE_HEIGHT + 'px'
+                });
+
+                $ ('slider-pictures').setStyle ({
+                     width: CONTAINER_WIDTH + 'px'
+                });
+
+                widthScroll = (numberOfThumbnails + 4) * (THUMBNAIL_SIZE + MARGIN_RIGHT_THUMBNAIL);
+
+                $ ('pics').setStyle ({
+                     width: widthScroll + 'px'
+                });
+
+                $ ('scroll').setStyle ({
+                     width: (CONTAINER_WIDTH - (NAVIGATION_ICON_WIDTH * 2) -10) + 'px',
+                     height: (THUMBNAIL_SIZE +20) + 'px',
+                     left: (NAVIGATION_ICON_WIDTH + MARGIN_RIGHT_THUMBNAIL) + 'px'
+                });
+
+                $$ ('.arrow').each(function (elementFound){
+                    elementFound.setStyle({
+                        width: NAVIGATION_ICON_WIDTH + 'px',
+                        height: THUMBNAIL_SIZE + 'px',
+                        lineHeight: THUMBNAIL_SIZE + 'px'
+                    });
+                });
+            }
+
+        </script>
+        <style type="text/css">
+            body, div {
+                margin: 0;
+                padding: 0;
+                border: 0;
+            }
+
+            body {
+                font-family: arial, helvetica, clean, sans-serif;
+                font-size: 100%;
+                font-style: normal;
+                font-variant: normal;
+                font-weight: normal;
+                 user-select: none; /* disallow selections CSS3 */
+                -moz-user-select: none; /* disallow selections mozilla */
+                -khtml-user-select: none; /* disallow selections safari */
+            }
+
+            #preview {
+                padding: 5px;
+            }
+
+            #slider-pictures {
+                position: relative;
+                margin: 5px;
+            }
+
+            #scroll {
+                float: left;
+                position: relative;
+                top: 0;
+                overflow: hidden;
+            }
+
+            #pics {
+                position: relative;
+                display: block;
+                padding-top: 10px;
+                -webkit-transition:all 0.3s ease-in-out;
+                -moz-transition:all 0.3s ease-in-out;
+                -o-transition:all 0.3s ease-in-out;
+                -ms-transition:all 0.3s ease-in-out;
+                transition:all 0.3s ease-in-out;
+            }
+
+            #pics div {
+                float: left;
+            }
+
+            .thumbnail {
+                cursor: pointer;
+                float: left;
+                margin-right: 4px;
+                overflow: hidden;
+                -webkit-transition:  -webkit-transform .2s ease-out;
+                -moz-transition: -moz-transform .2s ease-out;
+                -o-transition: -o-transform .2s ease-out;
+                -ms-transition: -ms-transform .2s ease-out;
+                transition: transform .2s ease-out;
+            }
+
+            .thumbnail:hover {
+               -webkit-transform: scale(1.2);
+               -moz-transform: scale(1.2);
+               -o-transform: scale(1.2);
+               transform: scale(1.2);
+               z-index: 2;
+            }
+
+            #previousButton {
+                left: 0;
+                top: 0;
+                -moz-border-radius-topleft: 10px;
+                -webkit-border-radius-topleft: 10px;
+                border-top-left-radius: 10px;
+               	-moz-border-radius-bottomleft: 10px;
+                -webkit-border-radius-bottomleft: 10px;
+                border-bottom-left-radius: 10px;
+            }
+
+            #nextButton {
+                right: 0;
+                top: 0;
+                -moz-border-radius-topright: 10px;
+                -webkit-border-radius-topright: 10px;
+                border-top-right-radius: 10px;
+                -moz-border-radius-bottomright: 10px;
+                -webkit-border-radius-bottomright: 10px;
+                border-bottom-right-radius: 10px;
+            }
+
+            .arrow {
+                background-color: #DDD;
+                cursor: pointer;
+                font-size: 1.2em;
+                position: absolute;
+                text-align: center;
+                margin-top: 10px;
+            }
+
+            #title {
+                text-align: center;
+                font-size: 80%;
+            }
+
+            div.arrow:hover {
+                background-color: #333333;
+                color: #ECECE4;
+            }
+        </style>
+    </head>
+    <body onload="this.openSession();return false;">
+        <div id="container">
+            <div id="preview" onclick="downloadAsset ();">
+			</div>
+			<div id="title"></div>
+            <div id="slider-pictures">
+                <div id="scroll">
+                    <div id="pics"></div>
+                </div>
+                <div id="previousButton" class="arrow" onclick="showPrevious ();">&laquo;</div>
+                <div id="nextButton" class="arrow" onclick="showNext ();">&raquo;</div>
+             </div>
+        </div>
+    </body>
+</html>
